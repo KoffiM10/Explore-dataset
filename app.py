@@ -151,30 +151,35 @@ st.markdown(f"""
 st.subheader("📄 Génération du rapport PDF")
 
 if st.button("📥 Générer le rapport PDF"):
-
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-
     pdf.cell(0, 10, "Rapport d'exploration du dataset", ln=True, align="C")
     pdf.ln(5)
 
     pdf.set_font("Arial", size=10)
     pdf.multi_cell(0, 8, f"""
-Résumé exécutif :
-- Nombre de lignes : {df.shape[0]}
-- Nombre de colonnes : {df.shape[1]}
-- Variables numériques : {len(num_cols)}
-- Variables catégorielles : {len(cat_cols)}
-- Valeurs manquantes : {total_missing}
-- Qualité des données : {data_quality}
+    Résumé exécutif :
+    - Nombre de lignes : {df.shape[0]}
+    - Nombre de colonnes : {df.shape[1]}
+    - Variables numériques : {len(num_cols)}
+    - Variables catégorielles : {len(cat_cols)}
+    - Valeurs manquantes : {total_missing}
+    - Qualité des données : {data_quality}
 
-Recommandations :
-- Nettoyer les valeurs manquantes si nécessaire
-- Analyser les variables clés
-- Passer à une analyse exploratoire approfondie
-""")
+    Recommandations :
+    - Nettoyer les valeurs manquantes si nécessaire
+    - Analyser les variables clés
+    - Passer à une analyse exploratoire approfondie
+    """)
 
-    pdf.output("Outputs/exploration_report.pdf")
+    # ✅ Génération en mémoire
+    pdf_bytes = pdf.output(dest="S").encode("latin1")
 
-    st.success("✅ Rapport PDF généré avec succès (exploration_report.pdf)")
+    # ✅ Bouton de téléchargement Streamlit
+    st.download_button(
+        label="📥 Télécharger le rapport PDF",
+        data=pdf_bytes,
+        file_name="exploration_report.pdf",
+        mime="application/pdf"
+    )
