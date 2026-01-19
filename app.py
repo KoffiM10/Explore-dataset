@@ -7,6 +7,14 @@ import seaborn as sns
 from fpdf import FPDF
 
 # =========================
+# FONCTION UTILITAIRE PDF
+# =========================
+def clean_text_for_pdf(text):
+    if isinstance(text, str):
+        return text.encode("latin-1", "ignore").decode("latin-1")
+    return text
+
+# =========================
 # CONFIGURATION STREAMLIT
 # =========================
 st.set_page_config(
@@ -15,33 +23,51 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📈Explore your datasets")
+st.title("📈 Explore your datasets")
 
 # =========================
-# UPLOAD DU DATASET
+# SIDEBAR — UPLOAD
 # =========================
 st.sidebar.header("📂 Chargement des données")
 
 uploaded_file = st.sidebar.file_uploader(
-    "Importer un fichier CSV",
-    type=["csv"]
+    "Importer un fichier (CSV ou Excel)",
+    type=["csv", "xlsx"]
 )
 
 if uploaded_file is None:
-    st.info("Veuillez importer un fichier CSV pour commencer.")
+    st.info("Veuillez importer un fichier CSV ou Excel pour commencer.")
     st.stop()
 
 # =========================
-# LECTURE DU DATASET
+# GESTION DES FICHIERS EXCEL
 # =========================
+sheet_name = None
+if uploaded_file.name.endswith(".xlsx"):
+    excel_file = pd.ExcelFile(uploaded_file)
+    sheet_name = st.sidebar.selectbox(
+        "📄 Choisir la feuille Excel",
+        excel_file.sheet_names
+    )
+
+# =========================
+# CACHE DE CHARGEMENT
+# =========================
+@st.cache_data
+def load_data(file, sheet=None):
+    if file.name.endswith(".csv"):
+        return pd.read_csv(file)
+    elif file.name.endswith(".xlsx"):
+        return pd.read_excel(file, sheet_name=sheet)
+
 try:
-    df = pd.read_csv(uploaded_file)
+    df = load_data(uploaded_file, sheet_name)
 except Exception as e:
     st.error(f"Erreur lors du chargement du fichier : {e}")
     st.stop()
 
 # =========================
-# APERÇU DES DONNÉES
+# APERÇU
 # =========================
 st.subheader("👀 Aperçu des données")
 st.dataframe(df.head())
@@ -50,18 +76,18 @@ st.dataframe(df.head())
 # DIMENSIONS
 # =========================
 st.subheader("📐 Dimensions")
-st.write(f"Nombre de lignes : **{df.shape[0]}**")
-st.write(f"Nombre de colonnes : **{df.shape[1]}**")
+st.write(f"Lignes : **{df.shape[0]}**")
+st.write(f"Colonnes : **{df.shape[1]}**")
 
 # =========================
-# TYPES DE VARIABLES
+# TYPES
 # =========================
 num_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
 cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
 
 st.subheader("📑 Types de variables")
-st.write("**Variables numériques :**", num_cols)
-st.write("**Variables catégorielles :**", cat_cols)
+st.write("Numériques :", num_cols)
+st.write("Catégorielles :", cat_cols)
 
 # =========================
 # QUALITÉ DES DONNÉES
@@ -71,114 +97,92 @@ missing_df = df.isnull().sum().reset_index()
 missing_df.columns = ["Colonne", "Valeurs manquantes"]
 st.dataframe(missing_df)
 
+total_missing = int(df.isnull().sum().sum())
+
 # =========================
-# STATISTIQUES DESCRIPTIVES
+# STATISTIQUES
 # =========================
-st.subheader("📊 Statistiques descriptives (numériques)")
+st.subheader("📊 Statistiques descriptives")
 if num_cols:
     st.dataframe(df[num_cols].describe())
 else:
-    st.warning("Aucune variable numérique détectée.")
+    st.warning("Aucune variable numérique.")
 
 # =========================
-# VALEURS UNIQUES
+# VISUALISATION
 # =========================
-st.subheader("🔎 Valeurs uniques (aperçu)")
-for col in cat_cols:
-    st.write(f"**{col}** — {df[col].nunique()} valeurs uniques")
-    st.write(df[col].unique()[:10])
-
-# =========================
-# VISUALISATIONS
-# =========================
-st.subheader("📈 Visualisations")
+st.subheader("📈 Distribution")
 
 if num_cols:
-    selected_col = st.selectbox("Choisir une variable numérique", num_cols)
-
+    selected_col = st.selectbox("Choisir une variable", num_cols)
     fig, ax = plt.subplots()
-    sns.histplot(df[selected_col], kde=True, ax=ax)
-    ax.set_title(f"Distribution de {selected_col}")
+    sns.histplot(df[selected_col].dropna(), kde=True, ax=ax)
     st.pyplot(fig)
 
 # =========================
-# CORRÉLATION
+# CORRÉLATIONS
 # =========================
 st.subheader("🔗 Corrélations")
 
 if len(num_cols) > 1:
     fig, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(
-        df[num_cols].corr(),
-        annot=True,
-        cmap="coolwarm",
-        fmt=".2f",
-        ax=ax
-    )
-    ax.set_title("Matrice de corrélation")
+    sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
     st.pyplot(fig)
-else:
-    st.info("Pas assez de variables numériques pour une corrélation.")
 
 # =========================
-# INFORMATIONS GÉNÉRALES
+# INFO
 # =========================
 st.subheader("ℹ️ Informations générales")
-
 buffer = io.StringIO()
 df.info(buf=buffer)
 st.text(buffer.getvalue())
 
 # =========================
-# SYNTHÈSE MÉTIER AUTOMATIQUE
+# SYNTHÈSE
 # =========================
-st.subheader("🧠 Synthèse métier automatique")
+st.subheader("🧠 Synthèse métier")
 
-total_missing = df.isnull().sum().sum()
-data_quality = "Bonne" if total_missing == 0 else "Moyenne" if total_missing < (0.05 * df.size) else "Faible"
+data_quality = (
+    "Bonne" if total_missing == 0
+    else "Moyenne" if total_missing < 0.05 * df.size
+    else "Faible"
+)
 
 st.markdown(f"""
-- Dataset de **{df.shape[0]} lignes** et **{df.shape[1]} colonnes**
+- **{df.shape[0]} lignes**
+- **{df.shape[1]} colonnes**
 - **{len(num_cols)} variables numériques**
 - **{len(cat_cols)} variables catégorielles**
 - **{total_missing} valeurs manquantes**
-- **Qualité globale des données : {data_quality}**
+- **Qualité des données : {data_quality}**
 """)
 
 # =========================
-# GÉNÉRATION DU PDF
+# PDF
 # =========================
-st.subheader("📄 Génération du rapport PDF")
+st.subheader("📄 Rapport PDF")
 
 if st.button("📥 Générer le rapport PDF"):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(0, 10, "Rapport d'exploration du dataset", ln=True, align="C")
-    pdf.ln(5)
-
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 8, f"""
-    Résumé exécutif :
-    - Nombre de lignes : {df.shape[0]}
-    - Nombre de colonnes : {df.shape[1]}
-    - Variables numériques : {len(num_cols)}
-    - Variables catégorielles : {len(cat_cols)}
-    - Valeurs manquantes : {total_missing}
-    - Qualité des données : {data_quality}
 
-    Recommandations :
-    - Nettoyer les valeurs manquantes si nécessaire
-    - Analyser les variables clés
-    - Passer à une analyse exploratoire approfondie
-    """)
+    report_text = f"""
+Rapport d'exploration du dataset
 
-    # ✅ Génération en mémoire
+- Lignes : {df.shape[0]}
+- Colonnes : {df.shape[1]}
+- Variables numériques : {len(num_cols)}
+- Variables catégorielles : {len(cat_cols)}
+- Valeurs manquantes : {total_missing}
+- Qualité des données : {data_quality}
+"""
+
+    pdf.multi_cell(0, 8, clean_text_for_pdf(report_text))
     pdf_bytes = pdf.output(dest="S").encode("latin1")
 
-    # ✅ Bouton de téléchargement Streamlit
     st.download_button(
-        label="📥 Télécharger le rapport PDF",
+        "📥 Télécharger le PDF",
         data=pdf_bytes,
         file_name="exploration_report.pdf",
         mime="application/pdf"
