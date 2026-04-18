@@ -1,6 +1,6 @@
 # 📈 Explore Your Datasets
 
-Un outil interactif développé avec **Streamlit** pour explorer rapidement vos ensembles de données CSV.  
+Un outil interactif développé avec **Streamlit** pour explorer rapidement vos ensembles de données CSV et Excel.  
 Ce projet permet de charger un dataset, d’en analyser la structure, de visualiser les distributions, d’évaluer la qualité des données et de générer un rapport PDF synthétique.
 
 ---
